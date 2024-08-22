@@ -42,6 +42,7 @@ globals() {
     GOPRO_DEVICE=${GOPRO_DEVICE}
     GOPRO_IP=${GOPRO_IP}
     GOPRO_USER=${GOPRO_USER}
+    GOPRO_OUTPUT_FILE=${GOPRO_OUTPUT_FILE}
 }
 
 DEPS=( "ffmpeg" "curl" )
@@ -79,7 +80,10 @@ function run_args {
     fi 
     if [[ $GOPRO_USER ]]; then
     >&2 echo " * User:             $GOPRO_USER"
-    fi 
+    fi
+    if [[ $GOPRO_OUTPUT_FILE ]]; then
+    >&2 echo " * Output File:      $GOPRO_OUTPUT_FILE"
+    fi
     >&2 echo "=========================="
     >&2 echo ""
 }
@@ -102,6 +106,11 @@ function validate_arguments {
 
     if [[ ${GOPRO_PREVIEW} -eq 1 ]] && [[ ! $GOPRO_USER ]]; then
         red "-r | --preview needs -u | --user. Please provide it with the mentioned flags"
+        exit 1
+    fi
+
+    if [[ ${GOPRO_PREVIEW} -eq 1 ]] && [[ $OUTPUT_FILE ]]; then
+        red "-r | --preview and -o | --output_file are mutually exclusive"
         exit 1
     fi
     
@@ -151,6 +160,8 @@ Options:
   -v,  --preview           Just launch a preview in VLC. This will not expose the device to the OS.
 
   -u,  --user              VLC can't be started as root, please provide a username you want to run it with. (Typically your 'default/home' user)
+
+  -o,  --output_file       Stream the output to a file instead of a video device
 
   -V,  --verbose           echo every command that gets executed
 
@@ -203,6 +214,10 @@ function parse_args {
         ;;
       -u|--user)
         GOPRO_USER=$2
+        shift
+        ;;
+      -o|--output_file)
+        GOPRO_OUTPUT_FILE=$2
         shift
         ;;
       -a|--auto-start)
@@ -381,7 +396,12 @@ function expose_device {
         if [ -n "${GOPRO_CROP}" ]; then
             CROP=",crop=${GOPRO_CROP}"
         fi
-        ffmpeg -nostdin -threads 1 -i 'udp://@0.0.0.0:8554?overrun_nonfatal=1&fifo_size=50000000' -f:v mpegts -fflags nobuffer -vf format="yuv420p${CROP}" -f v4l2 /dev/video42
+
+        if [[ ${GOPRO_OUTPUT_FILE} ]]; then
+            ffmpeg -nostdin -threads 1 -i 'udp://@0.0.0.0:8554?overrun_nonfatal=1&fifo_size=50000000' -f:v mp4 -fflags nobuffer -vf format="yuv420p${CROP}" ${GOPRO_OUTPUT_FILE}
+        else
+            ffmpeg -nostdin -threads 1 -i 'udp://@0.0.0.0:8554?overrun_nonfatal=1&fifo_size=50000000' -f:v mpegts -fflags nobuffer -vf format="yuv420p${CROP}" -f v4l2 /dev/video42
+        fi
     elif [[ ${GOPRO_PREVIEW} -eq 1 ]]; then
         echo "Starting preview.."
         start_preview
